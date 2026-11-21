@@ -1,0 +1,930 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ILLEGAL CHESS — Cờ Vua Phạm Luật | Binlight</title>
+  <meta name="author" content="Binlight" />
+  <meta name="copyright" content="Binlight" />
+  <script src="/socket.io/socket.io.js"></script>
+  <style>
+    :root {
+      --bg: #0f172a;
+      --panel: rgba(15, 23, 42, 0.78);
+      --border: rgba(148, 163, 184, 0.24);
+      --gold: #f59e0b;
+      --neon: #38bdf8;
+      --text: #f8fafc;
+      --muted: #94a3b8;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+      color: var(--text);
+      background:
+        radial-gradient(circle at 15% 15%, rgba(56, 189, 248, 0.16), transparent 40%),
+        radial-gradient(circle at 85% 80%, rgba(245, 158, 11, 0.16), transparent 45%),
+        var(--bg);
+      padding: 16px;
+    }
+    .glass {
+      background: var(--panel);
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+    }
+    .gold-border { border-color: rgba(245, 158, 11, 0.55); box-shadow: 0 0 24px rgba(245, 158, 11, 0.18); }
+    .neon-border { border-color: rgba(56, 189, 248, 0.55); box-shadow: 0 0 22px rgba(56, 189, 248, 0.2); }
+    .btn {
+      cursor: pointer;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 10px 16px;
+      font-weight: 700;
+      color: var(--text);
+      background: rgba(30, 41, 59, 0.9);
+      transition: transform 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+    }
+    .btn:hover:not(:disabled) { transform: translateY(-2px); border-color: var(--neon); }
+    .btn:disabled { opacity: 0.45; cursor: not-allowed; }
+    .btn-gold { background: var(--gold); color: #090d16; border-color: var(--gold); }
+    .btn-gold:hover:not(:disabled) { background: #fbbf24; border-color: #fbbf24; }
+    .btn-neon { background: var(--neon); color: #090d16; border-color: var(--neon); }
+    .btn-neon:hover:not(:disabled) { background: #7dd3fc; border-color: #7dd3fc; }
+    .hidden { display: none !important; }
+
+    .container { max-width: 1240px; margin: 0 auto; }
+    .menu-box { max-width: 820px; margin: 28px auto; padding: 32px 24px; text-align: center; }
+    .title-grad {
+      font-size: clamp(2.2rem, 5vw, 3.6rem);
+      font-weight: 900;
+      margin: 8px 0;
+      background: linear-gradient(90deg, #fde68a, var(--gold), var(--neon));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    .menu-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 14px;
+      margin-top: 20px;
+      text-align: left;
+    }
+    .menu-card {
+      padding: 18px;
+      border-radius: 16px;
+      background: rgba(15, 23, 42, 0.85);
+      border: 1px solid var(--border);
+      cursor: pointer;
+      transition: transform 0.18s ease, border-color 0.18s ease;
+    }
+    .menu-card:hover { transform: translateY(-4px); border-color: var(--gold); }
+
+    input, select {
+      background: rgba(2, 6, 23, 0.85);
+      color: var(--text);
+      border: 1px solid #334155;
+      border-radius: 10px;
+      padding: 10px 12px;
+      font-size: 14px;
+    }
+    input:focus, select:focus { outline: none; border-color: var(--neon); }
+
+    .hud {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 14px 18px;
+      margin-bottom: 14px;
+    }
+    .game-grid {
+      display: grid;
+      grid-template-columns: minmax(300px, 540px) 1fr;
+      gap: 16px;
+      align-items: start;
+    }
+    @media (max-width: 900px) {
+      .game-grid { grid-template-columns: 1fr; }
+    }
+    .board {
+      display: grid;
+      grid-template-columns: repeat(8, 1fr);
+      aspect-ratio: 1 / 1;
+      width: 100%;
+      max-width: 500px;
+      margin: 0 auto;
+      border-radius: 12px;
+      overflow: hidden;
+      border: 2px solid var(--gold);
+    }
+    .sq {
+      border: none;
+      padding: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: clamp(1.5rem, 4.2vw, 2.5rem);
+      cursor: pointer;
+      position: relative;
+    }
+    .sq-light { background: #1e293b; }
+    .sq-dark { background: #090e1a; }
+    .sq-selected { outline: 3px solid var(--neon); outline-offset: -3px; background: rgba(56, 189, 248, 0.25) !important; }
+    .sq-target { box-shadow: inset 0 0 0 2px rgba(245, 158, 11, 0.75); }
+    .sq-void { background: repeating-linear-gradient(45deg, #020617, #020617 6px, #450a0a 6px, #450a0a 12px) !important; }
+    .sq-forbidden { box-shadow: inset 0 0 0 3px #ef4444; background: rgba(239, 68, 68, 0.22) !important; }
+    .p-w { color: #f8fafc; text-shadow: 0 2px 5px rgba(0,0,0,0.9); }
+    .p-b { color: var(--gold); text-shadow: 0 2px 5px rgba(0,0,0,0.95); }
+
+    .hand-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(185px, 1fr));
+      gap: 10px;
+    }
+    .card-btn {
+      text-align: left;
+      padding: 12px;
+      border-radius: 14px;
+      background: rgba(15, 23, 42, 0.9);
+      border: 1px solid rgba(245, 158, 11, 0.45);
+      color: var(--text);
+      cursor: pointer;
+      transition: transform 0.18s ease, border-color 0.18s ease;
+    }
+    .card-btn:hover:not(:disabled) { transform: translateY(-4px); border-color: var(--neon); }
+    .card-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      z-index: 60;
+      background: rgba(2, 6, 23, 0.85);
+      backdrop-filter: blur(8px);
+      padding: 16px;
+      overflow-y: auto;
+    }
+    .modal-box {
+      max-width: 1040px;
+      margin: 20px auto;
+      padding: 24px;
+    }
+    .catalog-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+      gap: 12px;
+      max-height: 62vh;
+      overflow-y: auto;
+      padding-right: 4px;
+    }
+    .toast {
+      position: fixed;
+      top: 16px;
+      right: 16px;
+      z-index: 90;
+      max-width: 380px;
+      padding: 12px 16px;
+      border-radius: 12px;
+      font-size: 13px;
+      font-weight: 600;
+      background: rgba(15, 23, 42, 0.96);
+      border: 1px solid var(--gold);
+      color: #fde68a;
+      box-shadow: 0 12px 28px rgba(0,0,0,0.45);
+    }
+    .toast.err { border-color: #f43f5e; color: #fecdd3; }
+    .footer-note { text-align: center; color: var(--muted); font-size: 12px; margin-top: 18px; }
+  </style>
+</head>
+<body>
+  <div id="toast" class="toast hidden"></div>
+
+  <!-- MÀN HÌNH MENU CHÍNH -->
+  <div id="menuScreen" class="container">
+    <div class="glass gold-border menu-box">
+      <div style="font-size:12px;letter-spacing:2px;color:var(--neon);font-weight:700;">
+        REALTIME BO3 • 50 RULE-BREAKING CARDS
+      </div>
+      <h1 class="title-grad">ILLEGAL CHESS</h1>
+      <p style="color:var(--muted);margin:0 auto 20px;max-width:560px;font-size:14px;">
+        Cờ Vua Phạm Luật — Chọn 5/50 lá bài, tạo phòng hoặc nhập mã phòng để chiến Best of 3 thời gian thực.
+      </p>
+
+      <div style="max-width:340px;margin:0 auto 14px;text-align:left;">
+        <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:6px;">Tên của bạn</label>
+        <input id="playerNameInput" type="text" maxlength="18" value="Player" style="width:100%;" />
+      </div>
+
+      <div id="socketStatusBar" style="font-size:12px;color:var(--neon);margin-bottom:14px;">
+        Đang kết nối máy chủ...
+      </div>
+
+      <div class="menu-grid">
+        <div class="menu-card" onclick="openDeckModal()">
+          <div style="color:var(--gold);font-weight:800;font-size:16px;margin-bottom:6px;">1. Chỉnh Thẻ Bài</div>
+          <div style="color:var(--muted);font-size:12px;line-height:1.5;">Mở khóa sẵn 50 lá bài. Chọn đúng 5 lá để mang vào trận.</div>
+          <div id="menuDeckCount" style="color:var(--neon);font-size:12px;font-weight:700;margin-top:10px;">Đã chọn: 5/5 lá</div>
+        </div>
+
+        <div class="menu-card neon-border" onclick="createRoom()">
+          <div style="color:var(--neon);font-weight:800;font-size:16px;margin-bottom:6px;">2. Tạo Phòng</div>
+          <div style="color:var(--muted);font-size:12px;line-height:1.5;">Tạo mã phòng ngẫu nhiên và chờ người chơi thứ 2 vào.</div>
+          <div style="color:var(--gold);font-size:12px;font-weight:700;margin-top:10px;">Tạo phòng ngay →</div>
+        </div>
+
+        <div class="menu-card" onclick="toggleJoinBox()">
+          <div style="color:#fde68a;font-weight:800;font-size:16px;margin-bottom:6px;">3. Vào Phòng</div>
+          <div style="color:var(--muted);font-size:12px;line-height:1.5;">Nhập mã phòng để kết nối vào ván đấu.</div>
+          <div style="color:var(--neon);font-size:12px;font-weight:700;margin-top:10px;">Nhập mã phòng →</div>
+        </div>
+      </div>
+
+      <div id="joinRoomBox" class="hidden" style="max-width:380px;margin:18px auto 0;display:flex;gap:8px;">
+        <input id="joinCodeInput" type="text" maxlength="6" placeholder="MÃ PHÒNG" style="flex:1;text-align:center;text-transform:uppercase;letter-spacing:3px;font-weight:800;" />
+        <button class="btn btn-neon" onclick="joinRoom()">Vào</button>
+      </div>
+
+      <div id="createdRoomBanner" class="hidden" style="max-width:420px;margin:18px auto 0;padding:14px;border-radius:14px;background:rgba(245,158,11,0.12);border:1px solid var(--gold);">
+        <div style="font-size:12px;color:var(--muted);margin-bottom:6px;">Mã phòng của bạn (chờ người chơi thứ 2):</div>
+        <div style="display:flex;align-items:center;justify-content:center;gap:12px;">
+          <span id="createdRoomCode" style="font-size:24px;font-weight:900;letter-spacing:4px;color:var(--gold);"></span>
+          <button class="btn btn-gold" style="padding:6px 12px;font-size:12px;" onclick="copyRoomCode()">Copy</button>
+        </div>
+      </div>
+    </div>
+    <div class="footer-note">© Binlight — ILLEGAL CHESS</div>
+  </div>
+
+  <!-- MÀN HÌNH TRẬN ĐẤU -->
+  <div id="gameScreen" class="container hidden">
+    <div class="glass hud">
+      <div style="display:flex;flex-wrap:wrap;align-items:center;gap:10px;">
+        <strong style="color:var(--gold);">ILLEGAL CHESS</strong>
+        <span style="background:#020617;padding:5px 10px;border-radius:8px;font-size:12px;color:var(--neon);">
+          PHÒNG: <strong id="hudRoomCode">----</strong>
+        </span>
+        <span style="background:rgba(245,158,11,0.16);padding:5px 10px;border-radius:8px;font-size:12px;color:#fde68a;">
+          VÁN <strong id="hudRound">1</strong>/3
+        </span>
+      </div>
+
+      <div style="display:flex;align-items:center;gap:10px;font-size:13px;font-weight:700;">
+        <span><span id="hudP1Name">P1</span>: <strong id="hudP1Score" style="color:var(--gold);">0</strong></span>
+        <span style="color:var(--muted);">VS</span>
+        <span><span id="hudP2Name">P2</span>: <strong id="hudP2Score" style="color:var(--neon);">0</strong></span>
+      </div>
+
+      <div style="display:flex;gap:8px;">
+        <button id="soundToggleBtn" class="btn" style="padding:7px 12px;font-size:12px;" onclick="toggleSound()">🔊 Âm thanh: BẬT</button>
+        <button class="btn" style="padding:7px 12px;font-size:12px;border-color:#f43f5e;color:#fecdd3;" onclick="backToMenu()">Thoát</button>
+      </div>
+    </div>
+
+    <div id="targetPromptBar" class="glass gold-border hidden" style="padding:12px 16px;margin-bottom:14px;display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px;">
+      <div>
+        <div style="font-size:11px;font-weight:800;color:var(--gold);text-transform:uppercase;">Đang chọn mục tiêu thẻ bài</div>
+        <div id="targetInstructionText" style="font-size:13px;margin-top:2px;"></div>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;">
+        <div id="extraCardControls" style="display:flex;align-items:center;gap:8px;"></div>
+        <button class="btn" style="padding:6px 12px;font-size:12px;" onclick="cancelCardTargeting()">Hủy</button>
+      </div>
+    </div>
+
+    <div class="game-grid">
+      <div class="glass" style="padding:16px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;font-size:12px;">
+          <div>
+            <strong id="turnBadge" style="color:var(--neon);">Đang chờ...</strong>
+            <span id="myColorBadge" style="color:var(--muted);margin-left:8px;"></span>
+          </div>
+          <span id="checkBadge" class="hidden" style="background:#e11d48;color:#fff;padding:3px 8px;border-radius:999px;font-weight:800;">
+            CHIẾU TƯỚNG!
+          </span>
+        </div>
+
+        <div id="chessBoard" class="board"></div>
+
+        <div id="lastMoveBanner" style="margin-top:12px;padding:10px 12px;border-radius:10px;background:#020617;border:1px solid #1e293b;font-size:13px;color:#fde68a;">
+          Đang khởi tạo bàn cờ...
+        </div>
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:14px;">
+        <div class="glass" style="padding:14px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+            <strong style="font-size:13px;color:var(--neon);">Bài trên tay đối thủ</strong>
+            <span id="enemyCardCountBadge" style="font-size:12px;color:var(--muted);">5 lá còn lại</span>
+          </div>
+          <div id="enemyCardsRow" style="display:flex;flex-wrap:wrap;gap:6px;font-size:12px;color:var(--muted);"></div>
+        </div>
+
+        <div class="glass gold-border" style="padding:14px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+            <strong style="font-size:13px;color:var(--gold);">Bộ 5 Thẻ Bài Của Bạn (1 thẻ/lượt)</strong>
+            <span id="cardTurnStatus" style="font-size:12px;color:#6ee7b7;">Sẵn sàng</span>
+          </div>
+          <div id="myHandGrid" class="hand-grid"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL CHỈNH THẺ BÀI -->
+  <div id="deckModal" class="modal-backdrop hidden">
+    <div class="glass gold-border modal-box">
+      <div style="display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:12px;margin-bottom:14px;">
+        <div>
+          <h2 style="margin:0;color:var(--gold);font-size:20px;">BỘ SƯU TẬP 50 THẺ BÀI (MỞ KHÓA 100%)</h2>
+          <div style="font-size:12px;color:var(--muted);margin-top:2px;">Chọn đúng 5 lá bài để lưu vào bộ bài.</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;">
+          <span id="deckModalCounter" style="font-weight:800;color:var(--neon);font-size:14px;">5 / 5 lá</span>
+          <button class="btn btn-gold" onclick="saveAndCloseDeck()">Lưu & Đóng</button>
+        </div>
+      </div>
+
+      <div style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:14px;">
+        <input id="deckSearchInput" type="text" placeholder="Tìm tên hoặc hiệu ứng thẻ..." oninput="renderDeckCatalog()" style="flex:1;min-width:200px;" />
+        <select id="rarityFilter" onchange="renderDeckCatalog()">
+          <option value="ALL">Tất cả độ hiếm</option>
+          <option value="Thường">Thường</option>
+          <option value="Hiếm">Hiếm</option>
+          <option value="Sử Thi">Sử Thi</option>
+          <option value="Huyền Thoại">Huyền Thoại</option>
+        </select>
+      </div>
+
+      <div id="deckCatalogGrid" class="catalog-grid"></div>
+    </div>
+  </div>
+
+  <!-- MODAL KẾT THÚC VÁN / BO3 -->
+  <div id="endModal" class="modal-backdrop hidden">
+    <div class="glass gold-border" style="max-width:420px;margin:80px auto;padding:24px;text-align:center;">
+      <h2 id="endTitle" style="margin:0 0 8px;color:var(--gold);">KẾT THÚC VÁN</h2>
+      <p id="endReason" style="color:var(--muted);font-size:13px;margin:0 0 12px;"></p>
+      <div id="endScoreBox" style="font-weight:800;color:var(--neon);margin-bottom:18px;"></div>
+      <div id="endActionButtons" style="display:flex;justify-content:center;gap:10px;flex-wrap:wrap;"></div>
+    </div>
+  </div>
+
+  <script>
+    const CARDS = [
+      { id: 1, name: 'Bước Nhảy Vọt', group: 'Tốt', rarity: 'Thường', desc: '1 Tốt tiến thẳng 3 ô nếu không bị cản.', mode: 'pick_own_pawn' },
+      { id: 2, name: 'Tốt Cảm Tử', group: 'Tốt', rarity: 'Hiếm', desc: 'Hy sinh 1 Tốt tiêu diệt Tốt/Mã địch liền kề.', mode: 'pawn_suicide' },
+      { id: 3, name: 'Phong Cấp Sớm', group: 'Tốt', rarity: 'Sử Thi', desc: 'Tốt hàng 6 phong cấp thành Xe hoặc Mã.', mode: 'early_promote' },
+      { id: 4, name: 'Bức Tường Thép', group: 'Tốt', rarity: 'Thường', desc: '1 Tốt bất tử đến hết lượt địch kế tiếp.', mode: 'pick_own_pawn' },
+      { id: 5, name: 'Tốt Đi Lùi', group: 'Tốt', rarity: 'Thường', desc: '1 Tốt đi lùi 1 ô thẳng hoặc ăn chéo lùi.', mode: 'instant' },
+      { id: 6, name: 'Triệu Hồi Dân Binh', group: 'Tốt', rarity: 'Hiếm', desc: 'Đặt thêm 1 Tốt vào ô trống hàng thứ 2.', mode: 'pick_empty_square' },
+      { id: 7, name: 'Đội Hình Chữ V', group: 'Tốt', rarity: 'Hiếm', desc: '2 Tốt cùng tiến 1 ô nếu phía trước trống.', mode: 'pick_two_own_pawns' },
+      { id: 8, name: 'Tốt Đột Kích', group: 'Tốt', rarity: 'Thường', desc: '1 Tốt ăn thẳng 1 ô phía trước lượt này.', mode: 'instant' },
+      { id: 9, name: 'Hoán Đổi Tiền Tuyến', group: 'Tốt', rarity: 'Thường', desc: 'Đổi chỗ 2 quân Tốt của bạn.', mode: 'pick_two_own_pawns' },
+      { id: 10, name: 'Tốt Nổ Tung', group: 'Tốt', rarity: 'Sử Thi', desc: 'Bị ăn ở lượt tới sẽ kéo quân ăn cùng bị loại.', mode: 'pick_own_pawn' },
+      { id: 11, name: 'Ngựa Thần Pegasus', group: 'Quân Cờ', rarity: 'Sử Thi', desc: '1 Mã đi 2 nước liên tiếp trong lượt này.', mode: 'pick_own_knight' },
+      { id: 12, name: 'Tượng Xuyên Thấu', group: 'Quân Cờ', rarity: 'Hiếm', desc: '1 Tượng nhảy qua tối đa 1 quân cản để ăn địch.', mode: 'instant' },
+      { id: 13, name: 'Xe Tăng Thiết Giáp', group: 'Quân Cờ', rarity: 'Sử Thi', desc: '1 Xe húc diệt quân đầu cản và đi thêm tối đa 2 ô.', mode: 'instant' },
+      { id: 14, name: 'Hậu Bóng Đêm', group: 'Quân Cờ', rarity: 'Huyền Thoại', desc: 'Hậu tàng hình trong 1 lượt (không thể bị ăn).', mode: 'instant' },
+      { id: 15, name: 'Ám Sát Từ Xa', group: 'Quân Cờ', rarity: 'Sử Thi', desc: 'Dùng Tượng/Mã hạ 1 Tốt địch bất kỳ không cần đi.', mode: 'assassinate_pawn' },
+      { id: 16, name: 'Dịch Chuyển Tức Thời', group: 'Quân Cờ', rarity: 'Hiếm', desc: 'Dịch chuyển 1 Mã tới ô trống nửa sân của bạn.', mode: 'teleport_knight' },
+      { id: 17, name: 'Song Sinh Tượng', group: 'Quân Cờ', rarity: 'Hiếm', desc: 'Mất cả 2 Tượng thì hồi sinh 1 Tượng ô gốc.', mode: 'instant' },
+      { id: 18, name: 'Pháo Đài Di Động', group: 'Quân Cờ', rarity: 'Hiếm', desc: 'Đổi chỗ 1 Xe và Hậu của bạn.', mode: 'swap_rook_queen' },
+      { id: 19, name: 'Cú Đá Hậu Cước', group: 'Quân Cờ', rarity: 'Thường', desc: 'Mã đi như Xe (tối đa 3 ô) lượt này.', mode: 'instant' },
+      { id: 20, name: 'Giam Cầm', group: 'Quân Cờ', rarity: 'Hiếm', desc: 'Đóng băng 1 quân địch (trừ Vua) lượt kế tiếp.', mode: 'pick_enemy_non_king' },
+      { id: 21, name: 'Phản Đòn', group: 'Quân Cờ', rarity: 'Hiếm', desc: 'Gắn bùa lên 1 quân; địch ăn sẽ bị tiêu diệt.', mode: 'pick_own_piece' },
+      { id: 22, name: 'Hồi Sinh Tướng Quân', group: 'Quân Cờ', rarity: 'Huyền Thoại', desc: 'Hồi sinh Mã hoặc Tượng đã mất vào hàng cuối.', mode: 'revive_officer' },
+      { id: 23, name: 'Vua Thiết Giáp', group: 'Vua', rarity: 'Sử Thi', desc: 'Vua đi tối đa 2 ô mọi hướng trong lượt này.', mode: 'instant' },
+      { id: 24, name: 'Nhập Thành Bất Quy Tắc', group: 'Vua', rarity: 'Hiếm', desc: 'Nhập thành kể cả khi Vua/Xe đã từng đi.', mode: 'illegal_castle' },
+      { id: 25, name: 'Thế Thân Hoàng Gia', group: 'Vua', rarity: 'Sử Thi', desc: 'Khi Vua bị chiếu, đổi chỗ Vua với 1 Tốt của bạn.', mode: 'pick_own_pawn' },
+      { id: 26, name: 'Vùng Cấm Địa', group: 'Vua', rarity: 'Hiếm', desc: 'Khóa 1 ô trống không ai được vào trong 2 lượt tới.', mode: 'pick_empty_square' },
+      { id: 27, name: 'Uy Quyền Đế Vương', group: 'Vua', rarity: 'Hiếm', desc: 'Đẩy lùi quân địch sát cạnh Vua ra xa thêm 1 ô.', mode: 'instant' },
+      { id: 28, name: 'Vua Phản Công', group: 'Vua', rarity: 'Huyền Thoại', desc: 'Vua ăn quân địch kể cả đang được bảo vệ.', mode: 'instant' },
+      { id: 29, name: 'Lá Chắn Hoàng Kim', group: 'Vua', rarity: 'Sử Thi', desc: 'Vua miễn nhiễm trạng thái Chiếu trong 1 lượt địch.', mode: 'instant' },
+      { id: 30, name: 'Triệu Hồi Cận Vệ', group: 'Vua', rarity: 'Thường', desc: 'Tạo 1 Tốt bảo vệ tại ô trống sát cạnh Vua.', mode: 'pick_empty_square' },
+      { id: 31, name: 'Đảo Ngược Bàn Cờ', group: 'Không Gian', rarity: 'Sử Thi', desc: 'Hoán đổi 2 quân cờ bất kỳ của địch (trừ Vua).', mode: 'pick_two_enemy_non_king' },
+      { id: 32, name: 'Lỗ Đen Vũ Trụ', group: 'Không Gian', rarity: 'Huyền Thoại', desc: 'Chọn ô trống hút 8 quân xung quanh vào gần tâm.', mode: 'pick_empty_square' },
+      { id: 33, name: 'Cướp Lượt (Time Stop)', group: 'Không Gian', rarity: 'Huyền Thoại', desc: 'Sau nước đi này, đi thêm 1 nước nữa (chỉ Tốt).', mode: 'instant' },
+      { id: 34, name: 'Hố Giun Không Gian', group: 'Không Gian', rarity: 'Hiếm', desc: 'Quân ở cột A dịch chuyển sang cột H và ngược lại.', mode: 'pick_own_piece' },
+      { id: 35, name: 'Sương Mù Chiến Tranh', group: 'Không Gian', rarity: 'Hiếm', desc: 'Che giấu Tốt của bạn trên màn hình địch 1 lượt.', mode: 'instant' },
+      { id: 36, name: 'Trọng Lực Nặng', group: 'Không Gian', rarity: 'Hiếm', desc: 'Lượt sau địch chỉ đi tối đa 2 ô mỗi quân.', mode: 'instant' },
+      { id: 37, name: 'Hoán Đổi Linh Hồn', group: 'Không Gian', rarity: 'Sử Thi', desc: 'Đổi chỗ 1 quân của bạn với 1 quân cùng loại địch.', mode: 'soul_swap' },
+      { id: 38, name: 'Xóa Sổ Ô Cờ', group: 'Không Gian', rarity: 'Huyền Thoại', desc: 'Phá hủy 1 ô trống thành hố sâu vĩnh viễn.', mode: 'pick_empty_square' },
+      { id: 39, name: 'Quay Ngược Thời Gian', group: 'Không Gian', rarity: 'Sử Thi', desc: 'Hoàn tác nước đi vừa rồi của đối thủ.', mode: 'instant' },
+      { id: 40, name: 'Cơn Bão Hỗn Loạn', group: 'Không Gian', rarity: 'Sử Thi', desc: 'Ngẫu nhiên hoán đổi 2 quân cờ (trừ Vua).', mode: 'instant' },
+      { id: 41, name: 'Soi Bài Đối Thủ', group: 'Tâm Lý', rarity: 'Thường', desc: 'Xem toàn bộ thẻ bài còn lại trên tay đối thủ.', mode: 'instant' },
+      { id: 42, name: 'Đánh Cắp Ý Tưởng', group: 'Tâm Lý', rarity: 'Sử Thi', desc: 'Sao chép ngẫu nhiên 1 lá bài từ tay đối thủ.', mode: 'instant' },
+      { id: 43, name: 'Phá Hủy Thẻ Bài', group: 'Tâm Lý', rarity: 'Hiếm', desc: 'Tiêu hủy ngẫu nhiên 1 lá bài chưa dùng của địch.', mode: 'instant' },
+      { id: 44, name: 'Khóa Phép (Silence)', group: 'Tâm Lý', rarity: 'Sử Thi', desc: 'Đối thủ không được dùng thẻ ở lượt kế tiếp.', mode: 'instant' },
+      { id: 45, name: 'Hoán Đổi Bộ Bài', group: 'Tâm Lý', rarity: 'Hiếm', desc: 'Tráo đổi ngẫu nhiên 1 lá bài với đối thủ.', mode: 'instant' },
+      { id: 46, name: 'Tái Chế', group: 'Tâm Lý', rarity: 'Hiếm', desc: 'Lấy lại 1 lá bài đã dùng trước đó trong ván.', mode: 'recycle_card' },
+      { id: 47, name: 'Bẫy Phản Phép', group: 'Tâm Lý', rarity: 'Sử Thi', desc: 'Đặt bẫy vô hiệu hóa thẻ địch dùng ở lượt tới.', mode: 'instant' },
+      { id: 48, name: 'Hiến Tế Lấy Quyền', group: 'Tâm Lý', rarity: 'Hiếm', desc: 'Hy sinh 1 Mã hoặc Tượng để hồi phục 2 thẻ đã dùng.', mode: 'sacrifice_officer' },
+      { id: 49, name: 'Cược Tất Tay', group: 'Tâm Lý', rarity: 'Huyền Thoại', desc: 'Vô hiệu hóa toàn bộ thẻ của cả 2 bên hết ván.', mode: 'instant' },
+      { id: 50, name: 'Thẩm Phán Tối Cao', group: 'Tâm Lý', rarity: 'Huyền Thoại', desc: 'Ít hơn địch từ 3 quân trở lên: diệt quân mạnh nhất địch.', mode: 'instant' }
+    ];
+
+    const GLYPHS = {
+      w: { k: '♔', q: '♕', r: '♖', b: '♗', n: '♘', p: '♙', fog: '☁' },
+      b: { k: '♚', q: '♛', r: '♜', b: '♝', n: '♞', p: '♟', fog: '☁' }
+    };
+
+    let soundEnabled = true;
+    let audioCtx = null;
+    function playTone(freq, duration = 0.12, type = 'sine', gainVal = 0.12) {
+      if (!soundEnabled) return;
+      try {
+        if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = type;
+        osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+        gain.gain.setValueAtTime(gainVal, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration);
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start();
+        osc.stop(audioCtx.currentTime + duration);
+      } catch (e) {}
+    }
+    const sfx = {
+      move: () => playTone(360, 0.09, 'triangle', 0.12),
+      card: () => { playTone(520, 0.09, 'sine', 0.12); setTimeout(() => playTone(780, 0.13, 'sine', 0.12), 70); },
+      check: () => { playTone(220, 0.16, 'sawtooth', 0.14); setTimeout(() => playTone(180, 0.2, 'sawtooth', 0.14), 110); },
+      win: () => { [523, 659, 784, 1046].forEach((f, idx) => setTimeout(() => playTone(f, 0.16, 'triangle', 0.14), idx * 90)); }
+    };
+    function toggleSound() {
+      soundEnabled = !soundEnabled;
+      document.getElementById('soundToggleBtn').textContent = soundEnabled ? '🔊 Âm thanh: BẬT' : '🔇 Âm thanh: TẮT';
+    }
+
+    const socket = typeof io === 'function' ? io() : null;
+    let selectedDeck = JSON.parse(localStorage.getItem('illegal_chess_deck') || 'null') || [1, 11, 23, 33, 41];
+    if (!Array.isArray(selectedDeck) || selectedDeck.length !== 5) selectedDeck = [1, 11, 23, 33, 41];
+    let tempDeck = [...selectedDeck];
+    let currentRoomCode = null;
+    let gameState = null;
+    let selectedSquare = null;
+    let activeCardTarget = null;
+
+    function showToast(msg, isError = false) {
+      const el = document.getElementById('toast');
+      el.textContent = msg;
+      el.className = isError ? 'toast err' : 'toast';
+      clearTimeout(showToast._t);
+      showToast._t = setTimeout(() => el.classList.add('hidden'), 3200);
+    }
+
+    function updateMenuDeckBadge() {
+      document.getElementById('menuDeckCount').textContent = `Đã chọn: ${selectedDeck.length}/5 lá`;
+    }
+    updateMenuDeckBadge();
+
+    function openDeckModal() {
+      tempDeck = [...selectedDeck];
+      document.getElementById('deckModal').classList.remove('hidden');
+      renderDeckCatalog();
+    }
+
+    function renderDeckCatalog() {
+      const q = (document.getElementById('deckSearchInput').value || '').toLowerCase().trim();
+      const rarity = document.getElementById('rarityFilter').value;
+      document.getElementById('deckModalCounter').textContent = `${tempDeck.length} / 5 lá`;
+
+      const filtered = CARDS.filter(c => {
+        const matchRarity = rarity === 'ALL' || c.rarity === rarity;
+        const matchText = !q || c.name.toLowerCase().includes(q) || c.desc.toLowerCase().includes(q) || `#${c.id}`.includes(q);
+        return matchRarity && matchText;
+      });
+
+      const grid = document.getElementById('deckCatalogGrid');
+      grid.innerHTML = '';
+      filtered.forEach(card => {
+        const picked = tempDeck.includes(card.id);
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'card-btn';
+        if (picked) {
+          btn.style.borderColor = '#f59e0b';
+          btn.style.background = 'rgba(245, 158, 11, 0.16)';
+        }
+        btn.innerHTML = `
+          <div style="display:flex;justify-content:space-between;font-size:11px;color:#94a3b8;margin-bottom:4px;">
+            <span>#${card.id} • ${card.group}</span>
+            <span style="color:#38bdf8;font-weight:700;">${card.rarity}</span>
+          </div>
+          <div style="font-weight:800;font-size:13px;color:#fff;margin-bottom:4px;">${card.name}</div>
+          <div style="font-size:11px;color:#cbd5e1;line-height:1.45;">${card.desc}</div>
+          <div style="font-size:11px;font-weight:700;margin-top:8px;color:${picked ? '#fbbf24' : '#64748b'};">
+            ${picked ? '✓ Đã chọn' : '+ Chọn lá này'}
+          </div>
+        `;
+        btn.onclick = () => toggleTempCard(card.id);
+        grid.appendChild(btn);
+      });
+    }
+
+    function toggleTempCard(id) {
+      if (tempDeck.includes(id)) {
+        tempDeck = tempDeck.filter(x => x !== id);
+      } else {
+        if (tempDeck.length >= 5) {
+          showToast('Chỉ được chọn tối đa 5 lá bài!', true);
+          return;
+        }
+        tempDeck.push(id);
+      }
+      renderDeckCatalog();
+    }
+
+    function saveAndCloseDeck() {
+      if (tempDeck.length !== 5) {
+        showToast('Cần chọn đúng 5 lá bài trước khi lưu!', true);
+        return;
+      }
+      selectedDeck = [...tempDeck];
+      localStorage.setItem('illegal_chess_deck', JSON.stringify(selectedDeck));
+      updateMenuDeckBadge();
+      document.getElementById('deckModal').classList.add('hidden');
+      showToast('Đã lưu bộ 5 thẻ bài!');
+      if (currentRoomCode && socket) {
+        socket.emit('update_deck', { code: currentRoomCode, deck: selectedDeck });
+      }
+    }
+
+    function toggleJoinBox() {
+      document.getElementById('joinRoomBox').classList.toggle('hidden');
+    }
+
+    function createRoom() {
+      if (!socket || !socket.connected) {
+        showToast('Chưa kết nối được Socket tới server. Hãy kiểm tra server đang chạy!', true);
+        return;
+      }
+      const playerName = document.getElementById('playerNameInput').value.trim() || 'Player 1';
+      socket.emit('create_room', { playerName, deck: selectedDeck });
+      sfx.card();
+    }
+
+    function joinRoom() {
+      if (!socket || !socket.connected) {
+        showToast('Chưa kết nối được Socket tới server!', true);
+        return;
+      }
+      const code = document.getElementById('joinCodeInput').value.trim().toUpperCase();
+      const playerName = document.getElementById('playerNameInput').value.trim() || 'Player 2';
+      if (!code) {
+        showToast('Vui lòng nhập mã phòng!', true);
+        return;
+      }
+      socket.emit('join_room', { code, playerName, deck: selectedDeck });
+    }
+
+    function copyRoomCode() {
+      const code = document.getElementById('createdRoomCode').textContent;
+      navigator.clipboard?.writeText(code).catch(() => {});
+      showToast(`Đã copy mã phòng: ${code}`);
+    }
+
+    function backToMenu() {
+      document.getElementById('gameScreen').classList.add('hidden');
+      document.getElementById('endModal').classList.add('hidden');
+      document.getElementById('menuScreen').classList.remove('hidden');
+      currentRoomCode = null;
+      gameState = null;
+    }
+
+    if (socket) {
+      socket.on('connect', () => {
+        const bar = document.getElementById('socketStatusBar');
+        bar.textContent = '● Đã kết nối máy chủ realtime';
+        bar.style.color = '#34d399';
+      });
+      socket.on('disconnect', () => {
+        const bar = document.getElementById('socketStatusBar');
+        bar.textContent = '● Mất kết nối máy chủ';
+        bar.style.color = '#fb7185';
+      });
+      socket.on('room_created', ({ code }) => {
+        currentRoomCode = code;
+        document.getElementById('createdRoomCode').textContent = code;
+        document.getElementById('createdRoomBanner').classList.remove('hidden');
+        showToast(`Đã tạo phòng ${code}. Đang chờ người chơi thứ 2...`);
+      });
+      socket.on('room_joined', ({ code }) => {
+        currentRoomCode = code;
+        document.getElementById('menuScreen').classList.add('hidden');
+        document.getElementById('gameScreen').classList.remove('hidden');
+        showToast(`Đã vào phòng ${code}!`);
+      });
+      socket.on('error_msg', (msg) => showToast(msg, true));
+      socket.on('opponent_disconnected', ({ message }) => showToast(message, true));
+      socket.on('room_state', (state) => {
+        const prevMove = gameState?.round?.moveNumber;
+        gameState = state;
+        currentRoomCode = state.code;
+        if (state.round) {
+          document.getElementById('menuScreen').classList.add('hidden');
+          document.getElementById('gameScreen').classList.remove('hidden');
+        }
+        renderHUD(state);
+        renderBoard(state);
+        renderCards(state);
+        if (state.round && prevMove !== undefined && state.round.moveNumber !== prevMove) {
+          sfx.move();
+          if (state.round.inCheck) sfx.check();
+        }
+        renderEndModal(state);
+      });
+    }
+
+    function renderHUD(state) {
+      document.getElementById('hudRoomCode').textContent = state.code;
+      document.getElementById('hudRound').textContent = state.roundNumber;
+      document.getElementById('hudP1Name').textContent = state.players[0]?.name || 'P1';
+      document.getElementById('hudP2Name').textContent = state.players[1]?.name || 'Đang chờ...';
+      document.getElementById('hudP1Score').textContent = state.scores.p1;
+      document.getElementById('hudP2Score').textContent = state.scores.p2;
+
+      const r = state.round;
+      if (!r) return;
+      const isMyTurn = r.turn === state.myColor;
+      const turnBadge = document.getElementById('turnBadge');
+      turnBadge.textContent = isMyTurn ? 'LƯỢT CỦA BẠN' : `LƯỢT ${r.turn === 'w' ? 'TRẮNG' : 'ĐEN'}`;
+      turnBadge.style.color = isMyTurn ? '#34d399' : '#94a3b8';
+
+      document.getElementById('myColorBadge').textContent = `Quân của bạn: ${state.myColor === 'w' ? 'Trắng (♔)' : 'Đen (♚)'}`;
+      document.getElementById('checkBadge').classList.toggle('hidden', !r.inCheck);
+      document.getElementById('lastMoveBanner').textContent = r.lastMoveSummary;
+    }
+
+    function renderBoard(state) {
+      const r = state.round;
+      if (!r) return;
+      const grid = document.getElementById('chessBoard');
+      const flip = state.myColor === 'b';
+      grid.innerHTML = '';
+
+      for (let vr = 0; vr < 8; vr++) {
+        for (let vc = 0; vc < 8; vc++) {
+          const ar = flip ? 7 - vr : vr;
+          const ac = flip ? 7 - vc : vc;
+
+          const sq = document.createElement('button');
+          sq.type = 'button';
+          sq.className = `sq ${(ar + ac) % 2 === 0 ? 'sq-light' : 'sq-dark'}`;
+          if (r.voidSquares?.some(s => s.r === ar && s.c === ac)) sq.classList.add('sq-void');
+          if (r.forbiddenZones?.some(z => z.r === ar && z.c === ac && z.turnsLeft > 0)) sq.classList.add('sq-forbidden');
+          if (selectedSquare && selectedSquare.r === ar && selectedSquare.c === ac) sq.classList.add('sq-selected');
+          else if (selectedSquare) sq.classList.add('sq-target');
+
+          const piece = r.board[ar][ac];
+          if (piece) {
+            sq.textContent = GLYPHS[piece.color]?.[piece.type] || '?';
+            sq.classList.add(piece.color === 'w' ? 'p-w' : 'p-b');
+          } else if (r.voidSquares?.some(s => s.r === ar && s.c === ac)) {
+            sq.textContent = '🕳';
+            sq.style.fontSize = '14px';
+          }
+
+          sq.onclick = () => onSquareClick(ar, ac);
+          grid.appendChild(sq);
+        }
+      }
+    }
+
+    function startCardTargeting(cardSlot) {
+      const card = CARDS.find(c => c.id === cardSlot.cardId);
+      if (!card || !socket) return;
+
+      if (card.mode === 'instant') {
+        sfx.card();
+        socket.emit('play_card', { code: currentRoomCode, cardUid: cardSlot.uid, targetData: {} });
+        return;
+      }
+
+      activeCardTarget = { cardUid: cardSlot.uid, card, stepData: {} };
+      selectedSquare = null;
+      sfx.card();
+
+      const bar = document.getElementById('targetPromptBar');
+      const extra = document.getElementById('extraCardControls');
+      extra.innerHTML = '';
+
+      const promptMap = {
+        pick_own_pawn: `${card.name}: Click vào 1 Tốt của bạn trên bàn cờ.`,
+        pick_own_knight: `${card.name}: Click vào 1 Mã của bạn trên bàn cờ.`,
+        pick_own_piece: `${card.name}: Click vào 1 quân của bạn trên bàn cờ.`,
+        pick_empty_square: `${card.name}: Click vào 1 ô trống trên bàn cờ.`,
+        pick_enemy_non_king: `${card.name}: Click vào 1 quân địch (trừ Vua).`,
+        pick_two_own_pawns: `${card.name}: Click chọn Tốt 1, sau đó click Tốt 2.`,
+        pick_two_enemy_non_king: `${card.name}: Click chọn quân địch 1, sau đó click quân địch 2.`,
+        pawn_suicide: `${card.name}: Click chọn Tốt của bạn, sau đó click Tốt/Mã địch liền kề.`,
+        early_promote: `${card.name}: Chọn loại phong cấp rồi click Tốt ở hàng 6.`,
+        assassinate_pawn: `${card.name}: Click chọn Tượng/Mã của bạn, sau đó click Tốt địch.`,
+        teleport_knight: `${card.name}: Click chọn Mã của bạn, sau đó click ô trống nửa sân bạn.`,
+        swap_rook_queen: `${card.name}: Click chọn Xe của bạn, sau đó click Hậu của bạn.`,
+        illegal_castle: `${card.name}: Click chọn Vua, sau đó click Xe cùng hàng.`,
+        soul_swap: `${card.name}: Click chọn quân của bạn, sau đó click quân cùng loại của địch.`,
+        revive_officer: `${card.name}: Chọn loại quân rồi click ô trống hàng cuối.`,
+        recycle_card: `${card.name}: Chọn lá bài đã dùng để tái chế.`,
+        sacrifice_officer: `${card.name}: Click chọn 1 Mã hoặc Tượng của bạn để hiến tế.`
+      };
+
+      if (card.mode === 'early_promote') {
+        extra.innerHTML = `<select id="promoSelect"><option value="r">Xe (♖)</option><option value="n">Mã (♘)</option></select>`;
+      } else if (card.mode === 'revive_officer') {
+        extra.innerHTML = `<select id="reviveTypeSelect"><option value="n">Mã (♘)</option><option value="b">Tượng (♗)</option></select>`;
+      } else if (card.mode === 'recycle_card') {
+        const usedCards = (gameState?.round?.myCards || []).filter(c => c.used && c.uid !== cardSlot.uid);
+        if (!usedCards.length) {
+          showToast('Bạn chưa dùng lá bài nào khác trong ván này!', true);
+          cancelCardTargeting();
+          return;
+        }
+        const opts = usedCards.map(u => {
+          const m = CARDS.find(x => x.id === u.cardId);
+          return `<option value="${u.uid}">${m ? m.name : 'Thẻ bài'}</option>`;
+        }).join('');
+        extra.innerHTML = `<select id="recycleSelect">${opts}</select><button type="button" class="btn btn-gold" style="padding:6px 12px;font-size:12px;" onclick="submitRecycleCard()">Xác nhận</button>`;
+      }
+
+      document.getElementById('targetInstructionText').textContent = promptMap[card.mode] || card.name;
+      bar.classList.remove('hidden');
+    }
+
+    function submitRecycleCard() {
+      if (!activeCardTarget || !socket) return;
+      const recycleUid = document.getElementById('recycleSelect')?.value;
+      socket.emit('play_card', { code: currentRoomCode, cardUid: activeCardTarget.cardUid, targetData: { recycleUid } });
+      cancelCardTargeting();
+    }
+
+    function cancelCardTargeting() {
+      activeCardTarget = null;
+      document.getElementById('targetPromptBar').classList.add('hidden');
+      document.getElementById('extraCardControls').innerHTML = '';
+      if (gameState) renderBoard(gameState);
+    }
+
+    function handleCardSquareClick(r, c) {
+      const mode = activeCardTarget.card.mode;
+      const d = activeCardTarget.stepData;
+
+      if (['pick_own_pawn', 'pick_own_knight', 'pick_own_piece', 'pick_empty_square', 'pick_enemy_non_king', 'sacrifice_officer'].includes(mode)) {
+        socket.emit('play_card', { code: currentRoomCode, cardUid: activeCardTarget.cardUid, targetData: { pos: { r, c } } });
+        cancelCardTargeting();
+        return;
+      }
+      if (mode === 'early_promote') {
+        const promoType = document.getElementById('promoSelect')?.value || 'r';
+        socket.emit('play_card', { code: currentRoomCode, cardUid: activeCardTarget.cardUid, targetData: { pos: { r, c }, promoType } });
+        cancelCardTargeting();
+        return;
+      }
+      if (mode === 'revive_officer') {
+        const pieceType = document.getElementById('reviveTypeSelect')?.value || 'n';
+        socket.emit('play_card', { code: currentRoomCode, cardUid: activeCardTarget.cardUid, targetData: { destPos: { r, c }, pieceType } });
+        cancelCardTargeting();
+        return;
+      }
+      if (!d.first) {
+        d.first = { r, c };
+        showToast('Đã chọn điểm 1 — click chọn điểm 2!');
+        return;
+      }
+      const second = { r, c };
+      const map = {
+        pick_two_own_pawns: { p1: d.first, p2: second },
+        pick_two_enemy_non_king: { p1: d.first, p2: second },
+        pawn_suicide: { pawnPos: d.first, enemyPos: second },
+        assassinate_pawn: { helperPos: d.first, targetPawnPos: second },
+        teleport_knight: { knightPos: d.first, destPos: second },
+        swap_rook_queen: { rookPos: d.first, queenPos: second },
+        illegal_castle: { kingPos: d.first, rookPos: second },
+        soul_swap: { myPos: d.first, enemyPos: second }
+      };
+      socket.emit('play_card', { code: currentRoomCode, cardUid: activeCardTarget.cardUid, targetData: map[mode] || {} });
+      cancelCardTargeting();
+    }
+
+    function onSquareClick(r, c) {
+      if (!gameState || !gameState.round || gameState.matchWinner || gameState.round.winnerColor) return;
+      if (activeCardTarget) {
+        handleCardSquareClick(r, c);
+        return;
+      }
+      if (gameState.round.turn !== gameState.myColor) {
+        showToast('Chưa tới lượt của bạn!', true);
+        return;
+      }
+      const piece = gameState.round.board[r][c];
+      if (!selectedSquare) {
+        if (piece && piece.color === gameState.myColor) {
+          selectedSquare = { r, c };
+          renderBoard(gameState);
+        }
+      } else {
+        if (selectedSquare.r === r && selectedSquare.c === c) {
+          selectedSquare = null;
+          renderBoard(gameState);
+          return;
+        }
+        const fromPiece = gameState.round.board[selectedSquare.r][selectedSquare.c];
+        if (piece && piece.color === gameState.myColor && !(fromPiece?.type === 'k' && piece.type === 'r')) {
+          selectedSquare = { r, c };
+          renderBoard(gameState);
+          return;
+        }
+        socket.emit('make_move', { code: currentRoomCode, from: selectedSquare, to: { r, c }, promotionChoice: 'q' });
+        selectedSquare = null;
+        renderBoard(gameState);
+      }
+    }
+
+    function renderCards(state) {
+      const r = state.round;
+      if (!r) return;
+      const myHandEl = document.getElementById('myHandGrid');
+      myHandEl.innerHTML = '';
+
+      const isMyTurn = r.turn === state.myColor;
+      const canUseCard = isMyTurn && !r.cardPlayedThisTurn && !r.myEffects?.cardsDisabledPermanent && !(r.myEffects?.silenceTurns > 0);
+      document.getElementById('cardTurnStatus').textContent = canUseCard ? 'Có thể dùng 1 thẻ' : 'Không khả dụng lượt này';
+
+      (r.myCards || []).forEach(slot => {
+        const meta = CARDS.find(c => c.id === slot.cardId) || { id: slot.cardId, name: 'Thẻ', rarity: '', desc: '' };
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'card-btn';
+        btn.disabled = slot.used || !canUseCard;
+        btn.innerHTML = `
+          <div style="display:flex;justify-content:space-between;font-size:10px;color:#94a3b8;margin-bottom:4px;">
+            <span>#${meta.id} • ${meta.rarity}</span>
+            <span>${slot.used ? 'ĐÃ DÙNG' : 'SẴN SÀNG'}</span>
+          </div>
+          <div style="font-weight:800;font-size:12px;color:#fbbf24;margin-bottom:4px;">${meta.name}</div>
+          <div style="font-size:11px;color:#cbd5e1;line-height:1.4;">${meta.desc}</div>
+        `;
+        btn.onclick = () => startCardTargeting(slot);
+        myHandEl.appendChild(btn);
+      });
+
+      document.getElementById('enemyCardCountBadge').textContent = `${r.enemyCardCount} lá chưa dùng`;
+      const enemyRow = document.getElementById('enemyCardsRow');
+      const hasRevealed = r.enemyCards?.some(c => c.cardId !== null);
+      if (hasRevealed) {
+        enemyRow.innerHTML = r.enemyCards.map(c => {
+          const m = CARDS.find(x => x.id === c.cardId);
+          return `<span style="padding:4px 8px;border-radius:8px;background:rgba(56,189,248,0.16);border:1px solid #38bdf8;color:#bae6fd;${c.used ? 'text-decoration:line-through;opacity:0.45;' : ''}">
+            ${m ? m.name : 'Đã dùng'}
+          </span>`;
+        }).join('');
+      } else {
+        enemyRow.innerHTML = Array.from({ length: r.enemyCardCount }, () =>
+          `<span style="padding:5px 10px;border-radius:8px;background:#1e293b;border:1px solid #334155;color:#94a3b8;">🂠 Úp</span>`
+        ).join('') || '<span>Hết bài</span>';
+      }
+    }
+
+    function renderEndModal(state) {
+      const r = state.round;
+      const modal = document.getElementById('endModal');
+      if (!r || !r.winnerColor) {
+        modal.classList.add('hidden');
+        return;
+      }
+      sfx.win();
+      modal.classList.remove('hidden');
+
+      const p1Name = state.players[0]?.name || 'Player 1';
+      const p2Name = state.players[1]?.name || 'Player 2';
+      document.getElementById('endScoreBox').textContent = `Tỷ số BO3: ${p1Name} ${state.scores.p1} — ${state.scores.p2} ${p2Name}`;
+
+      const btnBox = document.getElementById('endActionButtons');
+      if (state.matchWinner) {
+        document.getElementById('endTitle').textContent =
+          state.matchWinner === 'p1' ? `${p1Name} VÔ ĐỊCH BO3!` :
+          state.matchWinner === 'p2' ? `${p2Name} VÔ ĐỊCH BO3!` :
+          'CHUNG CUỘC HÒA BO3!';
+        document.getElementById('endReason').textContent = 'Trận Best of 3 đã kết thúc.';
+        btnBox.innerHTML = `
+          <button type="button" class="btn btn-gold" onclick="socket.emit('rematch_bo3', { code: currentRoomCode })">Tái đấu BO3</button>
+          <button type="button" class="btn" onclick="backToMenu()">Về Menu</button>
+        `;
+      } else {
+        document.getElementById('endTitle').textContent = `KẾT THÚC VÁN ${state.roundNumber}`;
+        document.getElementById('endReason').textContent = r.winReason || 'Ván đấu kết thúc.';
+        btnBox.innerHTML = `
+          <button type="button" class="btn btn-neon" onclick="socket.emit('next_round', { code: currentRoomCode })">
+            Sang Ván ${state.roundNumber + 1} (Đổi màu & Reset bài)
+          </button>
+        `;
+      }
+    }
+  </script>
+</body>
+</html>

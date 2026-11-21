@@ -1,0 +1,17 @@
+{
+  "name": "illegal-chess",
+  "version": "1.0.0",
+  "description": "Illegal Chess - Realtime Multiplayer Variant Chess with 50 Rule-Breaking Cards (BO3)",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "express": "^4.21.1",
+    "socket.io": "^4.8.1"
+  }
+}
