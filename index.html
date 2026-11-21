@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OKINI FOOD | Tinh Hoa Thịt Bò Nhập Khẩu Cao Cấp</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&family=Playfair+Display:ital,wght@0,600;0,700;1,600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="./style.css">
+    <script src="/socket.io/socket.io.js"></script>
+</head>
+<body>
+
+    <!-- CẢNH BÁO NẾU MỞ TRỰC TIẾP FILE HTML BẰNG FILE:// THAY VÌ NODE SERVER -->
+    <div id="file-protocol-warning" style="display:none;background:#8B0000;color:#FAF9F6;padding:12px 20px;text-align:center;font-size:0.9rem;position:fixed;top:0;left:0;right:0;z-index:10000;border-bottom:2px solid #D4AF37;">
+        ⚠️ Bạn đang mở trực tiếp file HTML (<code>file://</code>). Hãy mở Terminal tại thư mục dự án, chạy <code>npm install</code> rồi <code>npm start</code>, sau đó vào <strong>http://localhost:3000</strong> để có đầy đủ giao diện và Socket.io!
+    </div>
+    <script>
+        if (window.location.protocol === 'file:') {
+            document.getElementById('file-protocol-warning').style.display = 'block';
+        }
+    </script>
+
+    <!-- MÀN HÌNH ĐĂNG NHẬP / ĐĂNG KÝ BẮT BUỘC -->
+    <div id="auth-overlay" class="auth-overlay">
+        <div class="auth-box">
+            <div class="brand-logo-large">
+                <span class="logo-crown">♛</span>
+                <h1>OKINI FOOD</h1>
+                <p>PREMIUM WAGYU &amp; PRIME BEEF BOUTIQUE</p>
+            </div>
+            <div class="auth-tabs">
+                <button type="button" id="tab-login" class="auth-tab active" onclick="switchAuthMode('login')">Đăng Nhập</button>
+                <button type="button" id="tab-register" class="auth-tab" onclick="switchAuthMode('register')">Tạo Tài Khoản Nhanh</button>
+            </div>
+            <form id="auth-form" onsubmit="handleAuthSubmit(event)">
+                <div class="form-group">
+                    <label for="auth-username">Tên hiển thị / Tên đăng nhập</label>
+                    <input type="text" id="auth-username" placeholder="Nhập tên của bạn..." autocomplete="username" required>
+                </div>
+                <div class="form-group">
+                    <label for="auth-password">Mật khẩu</label>
+                    <input type="password" id="auth-password" placeholder="Nhập mật khẩu..." autocomplete="current-password" required>
+                </div>
+                <p id="auth-error" class="error-msg"></p>
+                <button type="submit" id="auth-submit-btn" class="btn-gold full-width">ĐĂNG NHẬP VÀO CỬA HÀNG</button>
+            </form>
+            <div class="auth-hint">
+                <small>Khách mới chỉ cần chọn "Tạo Tài Khoản Nhanh" với Tên + Mật khẩu bất kỳ.</small>
+            </div>
+        </div>
+    </div>
+
+    <!-- THANH ĐIỀU HƯỚNG CHÍNH -->
+    <header class="navbar">
+        <div class="nav-brand" onclick="switchSection('shop')">
+            <span class="logo-crown">♛</span>
+            <div>
+                <span class="brand-title">OKINI FOOD</span>
+                <span class="brand-sub">MASTER OF BEEF</span>
+            </div>
+        </div>
+
+        <nav class="nav-links" id="nav-links">
+            <button type="button" class="nav-item active" data-target="shop" onclick="switchSection('shop')">🥩 Cửa Hàng</button>
+            <button type="button" class="nav-item" data-target="tracking" onclick="switchSection('tracking')">🚚 Quá Trình Hàng Về <span id="badge-orders" class="badge">0</span></button>
+            <button type="button" class="nav-item" data-target="kitchen" onclick="switchSection('kitchen')">🔥 Góc Bếp &amp; Timer</button>
+            <button type="button" class="nav-item" data-target="trace" onclick="switchSection('trace')">🛡️ Truy Xuất Nguồn Gốc</button>
+            <button type="button" class="nav-item" data-target="planner" onclick="switchSection('planner')">🍽️ Combo Tiệc Tại Gia</button>
+            <button type="button" class="nav-item" data-target="loyalty" onclick="switchSection('loyalty')">👑 Tích Điểm VIP</button>
+            <button type="button" class="nav-item" data-target="reviews" onclick="switchSection('reviews')">⭐ Đánh Giá &amp; Top Bán Chạy</button>
+            <button type="button" id="nav-admin-btn" class="nav-item admin-nav hidden" data-target="admin" onclick="switchSection('admin')">⚙️ Quản Trị Viên</button>
+        </nav>
+
+        <div class="nav-actions">
+            <button type="button" id="sound-toggle" class="icon-btn" title="Bật/Tắt âm thanh" onclick="toggleSound()">🔊</button>
+            <button type="button" class="cart-btn" onclick="toggleCartDrawer()">
+                🛒 Giỏ Hàng <span id="cart-count" class="badge gold">0</span>
+            </button>
+            <div class="user-pill">
+                <span id="current-username">Khách</span>
+                <button type="button" class="logout-btn" onclick="logout()" title="Đăng xuất">Thoát</button>
+            </div>
+        </div>
+    </header>
+
+    <!-- NỘI DUNG CHÍNH -->
+    <main class="container">
+
+        <!-- 1. TAB CỬA HÀNG & SẢN PHẨM -->
+        <section id="sec-shop" class="page-section active">
+            <div class="hero-banner">
+                <div class="hero-content">
+                    <span class="hero-tag">NHẬP KHẨU CHÍNH NGẠCH -18°C</span>
+                    <h2>Trải Nghiệm Nghệ Thuật Thịt Bò Thượng Hạng</h2>
+                    <p>Từ Wagyu Nhật Bản A5 vân mỡ cẩm thạch đến Black Angus Mỹ chuẩn Prime. Cắt tươi theo yêu cầu, giao hỏa tốc trong 60 phút.</p>
+                    <div class="hero-btns">
+                        <button type="button" class="btn-gold" onclick="document.getElementById('product-grid').scrollIntoView({behavior:'smooth'})">Khám Phá Thực Đơn</button>
+                        <button type="button" class="btn-outline" onclick="switchSection('planner')">Tính Khẩu Phần Tiệc</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="section-header">
+                <h3>Danh Mục Thịt Bò Tuyển Chọn</h3>
+                <p>Chọn trọng lượng phù hợp và trải nghiệm đặt hàng thử nghiệm ngay trên hệ thống</p>
+            </div>
+
+            <div id="product-grid" class="product-grid"></div>
+        </section>
+
+        <!-- 2. TAB QUÁ TRÌNH HÀNG VỀ (ORDER TRACKING) -->
+        <section id="sec-tracking" class="page-section">
+            <div class="section-header">
+                <h3>Theo Dõi Quá Trình Hàng Về Thời Gian Thực</h3>
+                <p>Giám sát chuỗi cung ứng lạnh từ kho bảo quản Okini Food đến bàn ăn nhà bạn</p>
+            </div>
+            <div id="orders-list" class="orders-container"></div>
+        </section>
+
+        <!-- 3. MỞ RỘNG 1: GÓC BẾP & ĐỒNG HỒ BẤM GIỜ STEAK -->
+        <section id="sec-kitchen" class="page-section">
+            <div class="section-header">
+                <h3>Góc Bếp Okini &amp; Đồng Hồ Canh Độ Chín Steak</h3>
+                <p>Bí quyết áp chảo chuẩn nhà hàng 5 sao kèm bộ đếm ngược lật mặt thịt tự động báo chuông</p>
+            </div>
+
+            <div class="kitchen-grid">
+                <div class="timer-card">
+                    <h4>⏱️ Bộ Đếm Giờ Áp Chảo Steak (Độ dày tiêu chuẩn 2.5cm)</h4>
+                    <div class="doneness-selector">
+                        <button type="button" class="doneness-btn active" onclick="selectDoneness(90, 'Rare (Tái đỏ - 52°C)', this)">Rare (1p30/mặt)</button>
+                        <button type="button" class="doneness-btn" onclick="selectDoneness(150, 'Medium Rare (Tái vừa - 57°C)', this)">Medium Rare (2p30/mặt)</button>
+                        <button type="button" class="doneness-btn" onclick="selectDoneness(210, 'Medium (Chín vừa - 63°C)', this)">Medium (3p30/mặt)</button>
+                        <button type="button" class="doneness-btn" onclick="selectDoneness(300, 'Well Done (Chín kỹ - 71°C)', this)">Well Done (5p00/mặt)</button>
+                    </div>
+                    <div class="timer-display">
+                        <span id="timer-mode-label">Rare (Tái đỏ - 52°C)</span>
+                        <div id="timer-clock" class="clock-digits">01:30</div>
+                    </div>
+                    <div class="timer-controls">
+                        <button type="button" class="btn-gold" onclick="startSteakTimer()">▶ Bắt Đầu Áp Chảo</button>
+                        <button type="button" class="btn-outline" onclick="resetSteakTimer()">↺ Đặt Lại</button>
+                    </div>
+                </div>
+
+                <div class="recipe-card">
+                    <h4>👨‍🍳 Quy Trình 4 Bước Áp Chảo Chuẩn Chef Nhật</h4>
+                    <ol class="recipe-steps">
+                        <li><strong>Rã đông &amp; Thấm khô:</strong> Để thịt ở ngăn mát 12h, lấy ra ngoài 20 phút trước khi nấu. Dùng khăn giấy thấm thật khô bề mặt để tạo lớp vỏ cháy xém (Maillard) giòn rụm.</li>
+                        <li><strong>Ướp gia vị tối giản:</strong> Rắc muối biển hạt to (Flaky Sea Salt) và tiêu đen xay thô ngay trước khi đặt lên chảo gang nóng già (220°C).</li>
+                        <li><strong>Áp chảo &amp; Basting bơ tỏi:</strong> Lật mặt thịt đúng theo đồng hồ bên cạnh. Phút cuối hạ lửa, thả 30g bơ lạt, 2 tép tỏi đập dập và 2 nhánh lá hương thảo (Rosemary), rưới bơ liên tục lên mặt thịt.</li>
+                        <li><strong>Cho thịt nghỉ (Resting):</strong> Gắp thịt ra thớt gỗ, nghỉ 5-7 phút để nước ngọt bên trong ổn định trước khi thái lát thưởng thức.</li>
+                    </ol>
+                </div>
+            </div>
+        </section>
+
+        <!-- 4. MỞ RỘNG 2: TRUY XUẤT NGUỒN GỐC & CHỨNG NHẬN -->
+        <section id="sec-trace" class="page-section">
+            <div class="section-header">
+                <h3>Truy Xuất Nguồn Gốc &amp; Kiểm Định Chất Lượng</h3>
+                <p>Minh bạch 100% hành trình từ trang trại quốc tế đến kho lạnh OKINI FOOD</p>
+            </div>
+            <div class="trace-box">
+                <div class="trace-input-group">
+                    <input type="text" id="batch-input" placeholder="Nhập mã lô hàng (VD: LOT-JP889, LOT-US402, LOT-AU105)...">
+                    <button type="button" class="btn-gold" onclick="lookupBatch()">🔍 Kiểm Tra Lô Hàng</button>
+                </div>
+                <div class="sample-batches">
+                    <span>Mã lô mẫu nhanh:</span>
+                    <button type="button" class="chip-btn" onclick="quickBatch('LOT-JP889')">QR #LOT-JP889 (Wagyu A5)</button>
+                    <button type="button" class="chip-btn" onclick="quickBatch('LOT-US402')">QR #LOT-US402 (Black Angus)</button>
+                    <button type="button" class="chip-btn" onclick="quickBatch('LOT-AU105')">QR #LOT-AU105 (Bò Úc)</button>
+                </div>
+                <div id="batch-result" class="batch-result-card">
+                    <p class="muted-text">Vui lòng nhập hoặc chọn một mã QR lô hàng phía trên để xem hồ sơ kiểm dịch.</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- 5. MỞ RỘNG 3: COMBO TIỆC TẠI GIA (MEAL PLANNER) -->
+        <section id="sec-planner" class="page-section">
+            <div class="section-header">
+                <h3>Tính Toán Khẩu Phần &amp; Gợi Ý Combo Tiệc Tại Gia</h3>
+                <p>Không còn nỗi lo thiếu hay thừa thịt cho bữa tiệc gia đình và bạn bè</p>
+            </div>
+            <div class="planner-container">
+                <div class="planner-controls">
+                    <div class="form-group">
+                        <label for="guest-slider">Số lượng người tham gia tiệc: <strong id="guest-count-val" class="gold-text">4 người</strong></label>
+                        <input type="range" id="guest-slider" min="2" max="15" value="4" oninput="calculateMealPlan()">
+                    </div>
+                    <div class="form-group">
+                        <label for="party-style">Phong cách bữa tiệc:</label>
+                        <select id="party-style" onchange="calculateMealPlan()">
+                            <option value="bbq">Tiệc Nướng BBQ Than Hoa / Bếp Điện</option>
+                            <option value="steak">Tiệc Tối Beefsteak Lãng Mạn</option>
+                            <option value="hotpot">Tiệc Lẩu Bò Nhúng Giấm / Shabu-Shabu</option>
+                        </select>
+                    </div>
+                </div>
+                <div id="planner-output" class="planner-output"></div>
+            </div>
+        </section>
+
+        <!-- 6. MỞ RỘNG 4: TÍCH ĐIỂM & HẠNG THÀNH VIÊN -->
+        <section id="sec-loyalty" class="page-section">
+            <div class="section-header">
+                <h3>Đặc Quyền Hội Viên OKINI VIP CLUB</h3>
+                <p>Tích lũy 1 điểm cho mỗi 10.000đ đặt hàng thử nghiệm và đổi quà thượng hạng</p>
+            </div>
+            <div class="loyalty-layout">
+                <div class="vip-card" id="vip-card-visual">
+                    <div class="vip-card-top">
+                        <span>OKINI FOOD LOYALTY</span>
+                        <span id="vip-tier-badge" class="tier-badge">SILVER MEMBER</span>
+                    </div>
+                    <div class="vip-card-mid">
+                        <h4 id="vip-holder-name">KHÁCH HÀNG</h4>
+                        <p>Điểm tích lũy hiện tại: <strong id="vip-points-val" class="gold-text">100</strong> điểm</p>
+                    </div>
+                    <div class="vip-card-bot">
+                        <small>Hạng Gold: 500đ | Hạng VIP Wagyu: 1.500đ</small>
+                    </div>
+                </div>
+
+                <div class="rewards-grid">
+                    <div class="reward-item">
+                        <h5>🌿 Set Bơ Lạt Pháp &amp; Lá Hương Thảo Tươi</h5>
+                        <p>Gia vị hoàn hảo cho món Steak thơm lừng</p>
+                        <button type="button" class="btn-gold" onclick="redeemReward(100, 'Set Bơ Lạt & Lá Hương Thảo')">Đổi 100 Điểm</button>
+                    </div>
+                    <div class="reward-item">
+                        <h5>🎟️ Voucher Giảm Trực Tiếp 150.000đ</h5>
+                        <p>Áp dụng cho mọi đơn hàng Wagyu &amp; Prime</p>
+                        <button type="button" class="btn-gold" onclick="redeemReward(300, 'Voucher 150.000đ (Mã: VIP150)')">Đổi 300 Điểm</button>
+                    </div>
+                    <div class="reward-item">
+                        <h5>🥩 Tặng 250g Ba Chỉ Bò Mỹ Cuộn</h5>
+                        <p>Quà tặng tri ân dành riêng cho hội viên thân thiết</p>
+                        <button type="button" class="btn-gold" onclick="redeemReward(500, '250g Ba Chỉ Bò Mỹ Miễn Phí')">Đổi 500 Điểm</button>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 7. MỞ RỘNG 5: ĐÁNH GIÁ & TOP BEST-SELLER -->
+        <section id="sec-reviews" class="page-section">
+            <div class="section-header">
+                <h3>Bảng Xếp Hạng Best-Seller &amp; Đánh Giá Thực Tế</h3>
+                <p>Xếp hạng tự động cập nhật theo lượt đặt hàng thực tế trên hệ thống</p>
+            </div>
+
+            <div class="reviews-layout">
+                <div class="bestseller-box">
+                    <h4>🏆 Top 3 Thịt Bò Bán Chạy Nhất Tuần</h4>
+                    <div id="bestseller-list" class="bestseller-list"></div>
+                </div>
+
+                <div class="review-feed-box">
+                    <div class="review-form-card">
+                        <h4>✍️ Gửi Cảm Nhận Của Bạn</h4>
+                        <div class="review-form-row">
+                            <select id="rev-product">
+                                <option value="Bò Wagyu Nhật Bản A5">Bò Wagyu Nhật Bản A5</option>
+                                <option value="Thăn Nội Bò Mỹ Prime">Thăn Nội Bò Mỹ Prime</option>
+                                <option value="Sườn Non Bò Mỹ Rút Xương">Sườn Non Bò Mỹ Rút Xương</option>
+                                <option value="Lõi Vai Bò Úc Ngũ Cốc">Lõi Vai Bò Úc Ngũ Cốc</option>
+                                <option value="Ba Chỉ Bò Mỹ Cuộn">Ba Chỉ Bò Mỹ Cuộn</option>
+                            </select>
+                            <select id="rev-rating">
+                                <option value="5">⭐⭐⭐⭐⭐ (5 Sao - Tuyệt vời)</option>
+                                <option value="4">⭐⭐⭐⭐ (4 Sao - Rất ngon)</option>
+                                <option value="3">⭐⭐⭐ (3 Sao - Tạm ổn)</option>
+                            </select>
+                        </div>
+                        <textarea id="rev-comment" rows="2" placeholder="Chia sẻ trải nghiệm hương vị thịt bò Okini Food của bạn..."></textarea>
+                        <button type="button" class="btn-gold" onclick="submitReview()">Đăng Đánh Giá</button>
+                    </div>
+
+                    <div class="review-filter">
+                        <span>Lọc đánh giá:</span>
+                        <button type="button" class="chip-btn active" onclick="filterReviews('ALL', this)">Tất cả</button>
+                        <button type="button" class="chip-btn" onclick="filterReviews(5, this)">5 Sao</button>
+                        <button type="button" class="chip-btn" onclick="filterReviews(4, this)">4 Sao</button>
+                    </div>
+                    <div id="reviews-list" class="reviews-list"></div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 8. BẢNG ĐIỀU KHIỂN ADMIN (CHỈ HIỆN KHI ĐĂNG NHẬP TÀI KHOẢN NHAN VIEN) -->
+        <section id="sec-admin" class="page-section">
+            <div class="section-header">
+                <h3>⚙️ Trung Tâm Quản Trị OKINI FOOD (Admin: Nhan Vien)</h3>
+                <p>Điều phối đơn hàng, quản lý khách hàng và huấn luyện kịch bản trả lời AI theo thời gian thực</p>
+            </div>
+
+            <div class="admin-grid">
+                <div class="admin-card">
+                    <h4>🤖 Điều Chỉnh Kịch Bản Trả Lời AI</h4>
+                    <p class="small-muted">Từ khóa cách nhau bởi dấu <code>|</code> (VD: <code>giá|bao nhiêu|tiền</code>)</p>
+                    <div class="ai-add-form">
+                        <input type="text" id="new-ai-keyword" placeholder="Từ khóa kích hoạt (VD: freeship|miễn phí)">
+                        <textarea id="new-ai-reply" rows="2" placeholder="Câu trả lời tự động của nhân viên AI..."></textarea>
+                        <button type="button" class="btn-gold full-width" onclick="addAIRule()">+ Thêm Kịch Bản AI</button>
+                    </div>
+                    <div id="admin-ai-rules-list" class="admin-list"></div>
+                </div>
+
+                <div class="admin-card">
+                    <h4>📦 Điều Phối Đơn Hàng Khách Đặt</h4>
+                    <p class="small-muted">Bấm chuyển bước để cập nhật ngay lập tức lên màn hình khách hàng</p>
+                    <div id="admin-orders-list" class="admin-list"></div>
+                </div>
+
+                <div class="admin-card">
+                    <h4>👥 Khách Hàng Đăng Ký &amp; Trạng Thái</h4>
+                    <div id="admin-users-list" class="admin-list"></div>
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- NGĂN KÉO GIỎ HÀNG & THANH TOÁN THỬ -->
+    <aside id="cart-drawer" class="cart-drawer">
+        <div class="cart-header">
+            <h3>🛒 Giỏ Hàng Okini Food</h3>
+            <button type="button" class="close-btn" onclick="toggleCartDrawer()">✕</button>
+        </div>
+        <div id="cart-items" class="cart-items"></div>
+        <div class="cart-footer">
+            <div class="promo-row">
+                <input type="text" id="promo-input" placeholder="Mã giảm giá (OKINI10, WAGYU100)">
+                <button type="button" class="btn-outline" onclick="applyPromo()">Áp Dụng</button>
+            </div>
+            <div class="cart-summary">
+                <div class="summary-line"><span>Tạm tính:</span> <span id="cart-subtotal">0đ</span></div>
+                <div class="summary-line"><span>Giảm giá:</span> <span id="cart-discount" class="gold-text">-0đ</span></div>
+                <div class="summary-line total"><span>Tổng thanh toán:</span> <span id="cart-total">0đ</span></div>
+            </div>
+            <div class="checkout-fields">
+                <input type="text" id="checkout-address" placeholder="Địa chỉ nhận hàng (VD: 123 Nguyễn Huệ, Q.1)..." required>
+                <input type="text" id="checkout-note" placeholder="Ghi chú cắt thịt (VD: Cắt dày 2.5cm làm Steak)...">
+                <button type="button" class="btn-gold full-width" onclick="placeTestOrder()">🚀 ĐẶT HÀNG (CHẾ ĐỘ THỬ NGHIỆM)</button>
+            </div>
+        </div>
+    </aside>
+
+    <!-- WIDGET CHAT TRỰC TUYẾN VỚI NHÂN VIÊN / AI -->
+    <div class="chat-widget">
+        <button type="button" class="chat-toggle-btn" onclick="toggleChatBox()">
+            💬 Tư Vấn Thịt Bò (AI / Nhân Viên)
+        </button>
+        <div id="chat-box" class="chat-box hidden">
+            <div class="chat-box-header">
+                <div>
+                    <strong>OKINI CONCIERGE</strong>
+                    <small class="online-dot">● Trực tuyến 24/7</small>
+                </div>
+                <button type="button" class="close-btn" onclick="toggleChatBox()">✕</button>
+            </div>
+            <div id="admin-chat-target-bar" class="admin-chat-bar hidden">
+                <label for="admin-target-user">Trả lời cho khách:</label>
+                <select id="admin-target-user"></select>
+            </div>
+            <div id="chat-messages" class="chat-messages"></div>
+            <form class="chat-input-form" onsubmit="sendChatMessage(event)">
+                <input type="text" id="chat-input" placeholder="Hỏi về Wagyu, cách nướng, mã giảm giá..." required>
+                <button type="submit" class="btn-gold">Gửi</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- THÔNG BÁO TOAST -->
+    <div id="toast-container" class="toast-container"></div>
+
+    <script src="./app.js"></script>
+</body>
+</html>
